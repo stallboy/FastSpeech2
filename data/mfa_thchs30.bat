@@ -1,0 +1,1 @@
+..\..\TTS\montreal-forced-aligner\bin\mfa_align.exe d:\data\data_thchs30\per_speaker\ ..\..\TTS\montreal-forced-aligner\pretrained_models\mandarin-lexicon.txt ..\..\TTS\montreal-forced-aligner\pretrained_models\mandarin.zip ..\preprocessed\thchs30\

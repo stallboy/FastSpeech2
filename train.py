@@ -1,3 +1,4 @@
+# coding=utf8
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -182,6 +183,8 @@ def main(args):
                     length = mel_len[0].item()
                     mel_target_torch = mel_target[0, :length].detach().unsqueeze(0).transpose(1, 2)
                     mel_target = mel_target[0, :length].detach().cpu().transpose(0, 1)
+                    # 这里mel并没有用train步骤得来的mel谱，这样duration，f0，energy这些信息都用的ground truth的信息，并没有用prediction的信息
+                    # todo：增加eval产生的mel谱和之后的合成
                     mel_torch = mel_output[0, :length].detach().unsqueeze(0).transpose(1, 2)
                     mel = mel_output[0, :length].detach().cpu().transpose(0, 1)
                     mel_postnet_torch = mel_postnet_output[0, :length].detach().unsqueeze(0).transpose(1, 2)

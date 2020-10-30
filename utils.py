@@ -1,9 +1,11 @@
+# coding=utf8
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import matplotlib
 import matplotlib
+
 matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 from scipy.io import wavfile
@@ -13,6 +15,7 @@ import text
 import hparams as hp
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
 def get_alignment(tier):
     sil_phones = ['sil', 'sp', 'spn']
@@ -27,23 +30,24 @@ def get_alignment(tier):
 
         # Trimming leading silences
         if phones == []:
-            if p in sil_phones:
+            if p in sil_phones:  # 最开始的静音 不要
                 continue
             else:
                 start_time = s
         if p not in sil_phones:
             phones.append(p)
             end_time = e
-            end_idx = len(phones)
+            end_idx = len(phones)  # 最后的静音 也不要
         else:
             phones.append(p)
-        durations.append(int(e*hp.sampling_rate/hp.hop_length)-int(s*hp.sampling_rate/hp.hop_length))
+        durations.append(int(e * hp.sampling_rate / hp.hop_length) - int(s * hp.sampling_rate / hp.hop_length))
 
     # Trimming tailing silences
     phones = phones[:end_idx]
     durations = durations[:end_idx]
-    
+
     return phones, durations, start_time, end_time
+
 
 def process_meta(meta_path):
     with open(meta_path, "r", encoding="utf-8") as f:
@@ -55,9 +59,11 @@ def process_meta(meta_path):
             text.append(t)
         return name, text
 
+
 def get_param_num(model):
     num_param = sum(param.numel() for param in model.parameters())
     return num_param
+
 
 def plot_data(data, titles=None, filename=None):
     fig, axes = plt.subplots(len(data), 1, squeeze=False)
@@ -75,26 +81,28 @@ def plot_data(data, titles=None, filename=None):
         axes[i][0].set_aspect(2.5, adjustable='box')
         axes[i][0].set_ylim(0, hp.n_mel_channels)
         axes[i][0].set_title(titles[i], fontsize='medium')
-        axes[i][0].tick_params(labelsize='x-small', left=False, labelleft=False) 
+        axes[i][0].tick_params(labelsize='x-small', left=False, labelleft=False)
         axes[i][0].set_anchor('W')
-        
+
         ax1 = add_axis(fig, axes[i][0])
         ax1.plot(pitch, color='tomato')
         ax1.set_xlim(0, spectrogram.shape[1])
         ax1.set_ylim(0, hp.f0_max)
         ax1.set_ylabel('F0', color='tomato')
         ax1.tick_params(labelsize='x-small', colors='tomato', bottom=False, labelbottom=False)
-        
+
         ax2 = add_axis(fig, axes[i][0], 1.2)
         ax2.plot(energy, color='darkviolet')
         ax2.set_xlim(0, spectrogram.shape[1])
         ax2.set_ylim(hp.energy_min, hp.energy_max)
         ax2.set_ylabel('Energy', color='darkviolet')
         ax2.yaxis.set_label_position('right')
-        ax2.tick_params(labelsize='x-small', colors='darkviolet', bottom=False, labelbottom=False, left=False, labelleft=False, right=True, labelright=True)
-    
+        ax2.tick_params(labelsize='x-small', colors='darkviolet', bottom=False, labelbottom=False, left=False,
+                        labelleft=False, right=True, labelright=True)
+
     plt.savefig(filename, dpi=200)
     plt.close()
+
 
 def get_mask_from_lengths(lengths, max_len=None):
     batch_size = lengths.shape[0]
@@ -106,22 +114,35 @@ def get_mask_from_lengths(lengths, max_len=None):
 
     return mask
 
+
 def get_waveglow():
-    waveglow = torch.hub.load('nvidia/DeepLearningExamples:torchhub', 'nvidia_waveglow')
-    waveglow = waveglow.remove_weightnorm(waveglow)
-    waveglow.eval()
-    for m in waveglow.modules():
-        if 'Conv' in str(type(m)):
-            setattr(m, 'padding_mode', 'zeros')
+    import sys
+    sys.path.append('../../waveglow/')
+    waveglow_path = 'c:\\work\\waveglow\\waveglow_256channels_universal_v5.pt'
+    waveglow = torch.load(waveglow_path)['model']
+    # waveglow = waveglow.remove_weightnorm(waveglow)
+    waveglow.cuda().eval()
+    for k in waveglow.convinv:
+        k.float()
+    #
+    # waveglow = torch.hub.load('nvidia/DeepLearningExamples:torchhub', 'nvidia_waveglow')
+    # waveglow = waveglow.remove_weightnorm(waveglow)
+    # waveglow.eval()
+    # for m in waveglow.modules():
+    #     if 'Conv' in str(type(m)):
+    #         setattr(m, 'padding_mode', 'zeros')
 
     return waveglow
 
+
 def waveglow_infer(mel, waveglow, path):
     with torch.no_grad():
-        wav = waveglow.infer(mel, sigma=1.0) * hp.max_wav_value
+        wav = waveglow.infer(mel, sigma=1.0) #* hp.max_wav_value
         wav = wav.squeeze().cpu().numpy()
-    wav = wav.astype('int16')
+
+    # wav = wav.astype('int16')
     wavfile.write(path, hp.sampling_rate, wav)
+
 
 def melgan_infer(mel, melgan, path):
     with torch.no_grad():
@@ -129,13 +150,14 @@ def melgan_infer(mel, melgan, path):
     wav = wav.astype('int16')
     wavfile.write(path, hp.sampling_rate, wav)
 
+
 def get_melgan():
     melgan = torch.hub.load('seungwonpark/melgan', 'melgan')
     melgan.eval()
     return melgan
 
-def pad_1D(inputs, PAD=0):
 
+def pad_1D(inputs, PAD=0):
     def pad_data(x, length, PAD):
         x_padded = np.pad(x, (0, length - x.shape[0]),
                           mode='constant',
@@ -147,8 +169,8 @@ def pad_1D(inputs, PAD=0):
 
     return padded
 
-def pad_2D(inputs, maxlen=None):
 
+def pad_2D(inputs, maxlen=None):
     def pad(x, max_len):
         PAD = 0
         if np.shape(x)[0] > max_len:
@@ -168,20 +190,21 @@ def pad_2D(inputs, maxlen=None):
 
     return output
 
+
 def pad(input_ele, mel_max_length=None):
     if mel_max_length:
         max_len = mel_max_length
     else:
-        max_len = max([input_ele[i].size(0)for i in range(len(input_ele))])
+        max_len = max([input_ele[i].size(0) for i in range(len(input_ele))])
 
     out_list = list()
     for i, batch in enumerate(input_ele):
         if len(batch.shape) == 1:
             one_batch_padded = F.pad(
-                batch, (0, max_len-batch.size(0)), "constant", 0.0)
+                batch, (0, max_len - batch.size(0)), "constant", 0.0)
         elif len(batch.shape) == 2:
             one_batch_padded = F.pad(
-                batch, (0, 0, 0, max_len-batch.size(0)), "constant", 0.0)
+                batch, (0, 0, 0, max_len - batch.size(0)), "constant", 0.0)
         out_list.append(one_batch_padded)
     out_padded = torch.stack(out_list)
     return out_padded

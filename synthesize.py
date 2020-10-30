@@ -1,3 +1,4 @@
+# coding=utf8
 import torch
 import torch.nn as nn
 import numpy as np
@@ -15,21 +16,57 @@ import audio as Audio
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+
 def preprocess(text):
     text = text.rstrip(punctuation)
 
     g2p = G2p()
     phone = g2p(text)
     phone = list(filter(lambda p: p != ' ', phone))
-    phone = '{'+ '}{'.join(phone) + '}'
+    phone = '{' + '}{'.join(phone) + '}'
     phone = re.sub(r'\{[^\w\s]?\}', '{sp}', phone)
     phone = phone.replace('}{', ' ')
-    
-    print('|' + phone + '|')    
+
+    print('|' + phone + '|')
     sequence = np.array(text_to_sequence(phone, hp.text_cleaners))
     sequence = np.stack([sequence])
 
     return torch.from_numpy(sequence).long().to(device)
+
+
+mapping = {}
+
+
+def init_chs_dict():
+    dictionary_path = "c:\\work\\TTS\\montreal-forced-aligner\\pretrained_models\\mandarin-lexicon.txt"
+    with open(dictionary_path, encoding='utf-8') as f:
+        for line in f:
+            character, phones = line.rstrip().split(' ', 1)
+            mapping[character] = phones
+
+
+def preprocess_chs(text):
+    from pypinyin import lazy_pinyin, Style
+    pinyin = lazy_pinyin(text, style=Style.TONE3, neutral_tone_with_five=True)
+    phone_line = []
+    for character in pinyin:
+        if character == ' ':
+            phone_line.append('sp')
+        else:
+            phones = mapping.get(character)
+            if phones:
+                for phone in phones.split():
+                    phone_line.append(phone)
+            else:
+                print("missing", character)
+
+    all_phone = "{" + ' '.join(phone_line) + "}"
+    print(all_phone)
+    sequence = np.array(text_to_sequence(all_phone, hp.text_cleaners))
+    sequence = np.stack([sequence])
+
+    return torch.from_numpy(sequence).long().to(device)
+
 
 def get_FastSpeech2(num):
     checkpoint_path = os.path.join(hp.checkpoint_path, "checkpoint_{}.pth.tar".format(num))
@@ -39,13 +76,15 @@ def get_FastSpeech2(num):
     model.eval()
     return model
 
+
 def synthesize(model, waveglow, melgan, text, sentence, prefix=''):
-    sentence = sentence[:200] # long filename will result in OS Error
-    
+    sentence = sentence[:200]  # long filename will result in OS Error
+
     src_len = torch.from_numpy(np.array([text.shape[1]])).to(device)
-        
-    mel, mel_postnet, log_duration_output, f0_output, energy_output, _, _, mel_len = model(text, src_len)
-    
+
+    with torch.no_grad():
+        mel, mel_postnet, log_duration_output, f0_output, energy_output, _, _, mel_len = model(text, src_len)
+
     mel_torch = mel.transpose(1, 2).detach()
     mel_postnet_torch = mel_postnet.transpose(1, 2).detach()
     mel = mel[0].cpu().transpose(0, 1).detach()
@@ -58,20 +97,23 @@ def synthesize(model, waveglow, melgan, text, sentence, prefix=''):
 
     Audio.tools.inv_mel_spec(mel_postnet, os.path.join(hp.test_path, '{}_griffin_lim_{}.wav'.format(prefix, sentence)))
     if waveglow is not None:
-        utils.waveglow_infer(mel_postnet_torch, waveglow, os.path.join(hp.test_path, '{}_{}_{}.wav'.format(prefix, hp.vocoder, sentence)))
+        utils.waveglow_infer(mel_postnet_torch, waveglow,
+                             os.path.join(hp.test_path, '{}_{}_{}.wav'.format(prefix, hp.vocoder, sentence)))
     if melgan is not None:
-        utils.melgan_infer(mel_postnet_torch, melgan, os.path.join(hp.test_path, '{}_{}_{}.wav'.format(prefix, hp.vocoder, sentence)))
-    
-    utils.plot_data([(mel_postnet.numpy(), f0_output, energy_output)], ['Synthesized Spectrogram'], filename=os.path.join(hp.test_path, '{}_{}.png'.format(prefix, sentence)))
+        utils.melgan_infer(mel_postnet_torch, melgan,
+                           os.path.join(hp.test_path, '{}_{}_{}.wav'.format(prefix, hp.vocoder, sentence)))
+
+    utils.plot_data([(mel_postnet.numpy(), f0_output, energy_output)], ['Synthesized Spectrogram'],
+                    filename=os.path.join(hp.test_path, '{}_{}.png'.format(prefix, sentence)))
 
 
 if __name__ == "__main__":
     # Test
     parser = argparse.ArgumentParser()
-    parser.add_argument('--step', type=int, default=30000)
+    parser.add_argument('--step', type=int, default=160000)
     args = parser.parse_args()
-    
-    sentences = [
+
+    sentences1 = [
         "Advanced text to speech models such as Fast Speech can synthesize speech significantly faster than previous auto regressive models with comparable quality. The training of Fast Speech model relies on an auto regressive teacher model for duration prediction and knowledge distillation, which can ease the one to many mapping problem in T T S. However, Fast Speech has several disadvantages, 1, the teacher student distillation pipeline is complicated, 2, the duration extracted from the teacher model is not accurate enough, and the target mel spectrograms distilled from teacher model suffer from information loss due to data simplification, both of which limit the voice quality.",
         "Printing, in the only sense with which we are at present concerned, differs from most if not from all the arts and crafts represented in the Exhibition",
         "in being comparatively modern.",
@@ -83,7 +125,18 @@ if __name__ == "__main__":
         "has never been surpassed.",
         "Printing, then, for our purpose, may be considered as the art of making books by means of movable types.",
         "Now, as all books not primarily intended as picture-books consist principally of types composed to form letterpress,"
-        ]
+    ]
+
+    sentences2 = [
+        "每个内容生产者都可以很方便地实现自我价值，更多的人有了微创业的机会。",
+        "语言的任何语义成分和关系都需要一定的形式来表现，声音就成了实现这一功能的最基本手段，语言系统中负载并传播语义的声音形式就是语音。",
+    ]
+
+    sentences = sentences1
+    if hp.dataset == "thchs30":
+        sentences = sentences2
+        args.step = 140000
+
 
     model = get_FastSpeech2(args.step).to(device)
     melgan = waveglow = None
@@ -93,7 +146,13 @@ if __name__ == "__main__":
     elif hp.vocoder == 'waveglow':
         waveglow = utils.get_waveglow()
         waveglow.to(device)
-    
+
+    if hp.dataset == "thchs30":
+        init_chs_dict()
+
     for sentence in sentences:
-        text = preprocess(sentence)
+        if hp.dataset == "thchs30":
+            text = preprocess_chs(sentence)
+        else:
+            text = preprocess(sentence)
         synthesize(model, waveglow, melgan, text, sentence, prefix='step_{}'.format(args.step))

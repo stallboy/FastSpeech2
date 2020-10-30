@@ -53,20 +53,22 @@ class Dataset(Dataset):
         Ds = [batch[ind]["D"] for ind in cut_list]
         f0s = [batch[ind]["f0"] for ind in cut_list]
         energies = [batch[ind]["energy"] for ind in cut_list]
+        # text（音素）和duration要一样多，duration里的数都加起来是mel谱，f0，energy的帧数
         for text, D, id_ in zip(texts, Ds, ids):
             if len(text) != len(D):
                 print(text, text.shape, D, D.shape, id_)
+
+        # 音素个数，mel谱的帧数，不一样
         length_text = np.array(list())
         for text in texts:
             length_text = np.append(length_text, text.shape[0])
-
         length_mel = np.array(list())
         for mel in mel_targets:
             length_mel = np.append(length_mel, mel.shape[0])
         
         texts = pad_1D(texts)
         Ds = pad_1D(Ds)
-        mel_targets = pad_2D(mel_targets)
+        mel_targets = pad_2D(mel_targets) #mel是<831, 80>， 831是时间帧数，80是频率上有80个系数做feature
         f0s = pad_1D(f0s)
         energies = pad_1D(energies)
         log_Ds = np.log(Ds + hparams.log_offset)
@@ -78,8 +80,8 @@ class Dataset(Dataset):
                "log_D": log_Ds,
                "f0": f0s,
                "energy": energies,
-               "src_len": length_text,
-               "mel_len": length_mel}
+               "src_len": length_text, #音素个数
+               "mel_len": length_mel}  #帧数
         
         return out
 

@@ -16,6 +16,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 def clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
+
 class VarianceAdaptor(nn.Module):
     """ Variance Adaptor """
 
@@ -25,36 +26,42 @@ class VarianceAdaptor(nn.Module):
         self.length_regulator = LengthRegulator()
         self.pitch_predictor = VariancePredictor()
         self.energy_predictor = VariancePredictor()
-        
-        self.pitch_bins = nn.Parameter(torch.exp(torch.linspace(np.log(hp.f0_min), np.log(hp.f0_max), hp.n_bins-1)))
-        self.energy_bins = nn.Parameter(torch.linspace(hp.energy_min, hp.energy_max, hp.n_bins-1))
+
+        self.pitch_bins = nn.Parameter(torch.exp(torch.linspace(np.log(hp.f0_min), np.log(hp.f0_max), hp.n_bins - 1)),
+                                       requires_grad=False)
+        self.energy_bins = nn.Parameter(torch.linspace(hp.energy_min, hp.energy_max, hp.n_bins - 1),
+                                        requires_grad=False)
         self.pitch_embedding = nn.Embedding(hp.n_bins, hp.encoder_hidden)
         self.energy_embedding = nn.Embedding(hp.n_bins, hp.encoder_hidden)
-    
-    def forward(self, x, src_mask, mel_mask=None, duration_target=None, pitch_target=None, energy_target=None, max_len=None):
+
+    def forward(self, x, src_mask, mel_mask=None, duration_target=None, pitch_target=None, energy_target=None,
+                max_len=None):
 
         log_duration_prediction = self.duration_predictor(x, src_mask)
         if duration_target is not None:
+            # x <16, 965, 256> 长度调整，从音素为单位 调整到 以 时间帧为单位
             x, mel_len = self.length_regulator(x, duration_target, max_len)
         else:
-            duration_rounded = torch.clamp(torch.round(torch.exp(log_duration_prediction)-hp.log_offset), min=0)
+            duration_rounded = torch.clamp(torch.round(torch.exp(log_duration_prediction) - hp.log_offset), min=0)
             x, mel_len = self.length_regulator(x, duration_rounded, max_len)
             mel_mask = utils.get_mask_from_lengths(mel_len)
-        
+
+        # pitch_embedding <16, 965, 256>
         pitch_prediction = self.pitch_predictor(x, mel_mask)
         if pitch_target is not None:
             pitch_embedding = self.pitch_embedding(torch.bucketize(pitch_target, self.pitch_bins))
         else:
             pitch_embedding = self.pitch_embedding(torch.bucketize(pitch_prediction, self.pitch_bins))
-        
+
         energy_prediction = self.energy_predictor(x, mel_mask)
         if energy_target is not None:
             energy_embedding = self.energy_embedding(torch.bucketize(energy_target, self.energy_bins))
         else:
             energy_embedding = self.energy_embedding(torch.bucketize(energy_prediction, self.energy_bins))
-        
+
+        # 最后混合原始的音素和时间导出的feature 加上 pitch和energy的 variance
         x = x + pitch_embedding + energy_embedding
-        
+
         return x, log_duration_prediction, pitch_prediction, energy_prediction, mel_len, mel_mask
 
 
@@ -89,7 +96,7 @@ class LengthRegulator(nn.Module):
 
         return out
 
-    def forward(self, x, duration, max_len):
+    def forward(self, x, duration, max_len): # x:<16, 110, 256>, duration: <16, 110>, max_len: 965
         output, mel_len = self.LR(x, duration, max_len)
         return output, mel_len
 
@@ -110,7 +117,7 @@ class VariancePredictor(nn.Module):
             ("conv1d_1", Conv(self.input_size,
                               self.filter_size,
                               kernel_size=self.kernel,
-                              padding=(self.kernel-1)//2)),
+                              padding=(self.kernel - 1) // 2)),
             ("relu_1", nn.ReLU()),
             ("layer_norm_1", nn.LayerNorm(self.filter_size)),
             ("dropout_1", nn.Dropout(self.dropout)),
@@ -129,10 +136,10 @@ class VariancePredictor(nn.Module):
         out = self.conv_layer(encoder_output)
         out = self.linear_layer(out)
         out = out.squeeze(-1)
-        
+
         if mask is not None:
             out = out.masked_fill(mask, 0.)
-        
+
         return out
 
 

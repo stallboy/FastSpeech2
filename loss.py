@@ -15,7 +15,7 @@ class FastSpeech2Loss(nn.Module):
         p_target.requires_grad = False
         e_target.requires_grad = False
         mel_target.requires_grad = False
-        
+
         log_d_predicted = log_d_predicted.masked_select(src_mask)
         log_d_target = log_d_target.masked_select(src_mask)
         p_predicted = p_predicted.masked_select(mel_mask)
@@ -27,6 +27,7 @@ class FastSpeech2Loss(nn.Module):
         mel_postnet = mel_postnet.masked_select(mel_mask.unsqueeze(-1))
         mel_target = mel_target.masked_select(mel_mask.unsqueeze(-1))
 
+        #mel谱用平方差，其他用绝对差
         mel_loss = self.mse_loss(mel, mel_target)
         mel_postnet_loss = self.mse_loss(mel_postnet, mel_target)
 

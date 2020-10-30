@@ -1,14 +1,18 @@
 # coding=utf8
-import numpy as np
+
 import os
-import tgt
-from scipy.io.wavfile import read
+
+import numpy as np
 import pyworld as pw
+import tgt
 import torch
+from scipy.io.wavfile import read
+
 import audio as Audio
-from utils import get_alignment
-from text import _clean_text
 import hparams as hp
+from text import _clean_text
+from utils import get_alignment
+
 
 def prepare_align(in_dir):
     with open(os.path.join(in_dir, 'metadata.csv'), encoding='utf-8') as f:
@@ -17,9 +21,10 @@ def prepare_align(in_dir):
             basename = parts[0]
             text = parts[2]
             text = _clean_text(text, hp.text_cleaners)
-            
+
             with open(os.path.join(in_dir, 'wavs', '{}.txt'.format(basename)), 'w') as f1:
                 f1.write(text)
+
 
 def build_from_path(in_dir, out_dir):
     index = 1
@@ -28,35 +33,36 @@ def build_from_path(in_dir, out_dir):
     f0_max = energy_max = 0
     f0_min = energy_min = 1000000
     n_frames = 0
-    with open(os.path.join(in_dir, 'metadata.csv'), encoding='utf-8') as f:
-        for line in f:
-            parts = line.strip().split('|')
-            basename = parts[0]
-            text = parts[2]
-            
-            ret = process_utterance(in_dir, out_dir, basename)
-            if ret is None:
-                continue
-            else:
-                info, f_max, f_min, e_max, e_min, n = ret
-            
-            if basename[:5] in ['LJ001', 'LJ002', 'LJ003']:
-                val.append(info)
-            else:
-                train.append(info)
 
-            if index % 100 == 0:
-                print("Done %d" % index)
-            index = index + 1
+    file_names = os.listdir(os.path.join(hp.preprocessed_path, "TextGrid"))
+    for file_name in file_names:
+        if not file_name.endswith('.TextGrid'):
+            continue
+        basename = file_name[:-9]
 
-            f0_max = max(f0_max, f_max)
-            f0_min = min(f0_min, f_min)
-            energy_max = max(energy_max, e_max)
-            energy_min = min(energy_min, e_min)
-            n_frames += n
-    
+        ret = process_utterance(in_dir, out_dir, basename)
+        if ret is None:
+            continue
+        else:
+            info, f_max, f_min, e_max, e_min, n = ret
+
+        if basename[:4] in ['A11_', 'A12_', 'A13_']:
+            val.append(info)
+        else:
+            train.append(info)
+
+        if index % 100 == 0:
+            print("Done %d" % index)
+        index = index + 1
+
+        f0_max = max(f0_max, f_max)
+        f0_min = min(f0_min, f_min)
+        energy_max = max(energy_max, e_max)
+        energy_min = min(energy_min, e_min)
+        n_frames += n
+
     with open(os.path.join(out_dir, 'stat.txt'), 'w', encoding='utf-8') as f:
-        strs = ['Total time: {} hours'.format(n_frames*hp.hop_length/hp.sampling_rate/3600),
+        strs = ['Total time: {} hours'.format(n_frames * hp.hop_length / hp.sampling_rate / 3600),
                 'Total frames: {}'.format(n_frames),
                 'Min F0: {}'.format(f0_min),
                 'Max F0: {}'.format(f0_max),
@@ -64,23 +70,24 @@ def build_from_path(in_dir, out_dir):
                 'Max energy: {}'.format(energy_max)]
         for s in strs:
             print(s)
-            f.write(s+'\n')
-    
+            f.write(s + '\n')
+
     return [r for r in train if r is not None], [r for r in val if r is not None]
+
 
 def process_utterance(in_dir, out_dir, basename):
     wav_path = os.path.join(in_dir, 'wavs', '{}.wav'.format(basename))
-    tg_path = os.path.join(out_dir, 'TextGrid', '{}.TextGrid'.format(basename)) 
-    
+    tg_path = os.path.join(out_dir, 'TextGrid', '{}.TextGrid'.format(basename))
+
     # Get alignments
     textgrid = tgt.io.read_textgrid(tg_path)
-    # phone: list<112, phone string>,
+    # phone: list<112, phone string>, 已去掉前后静音
     # duration: list<112, frames number per phone>, 每个里面是此phone持续的帧数
-    # start, end: float
+    # start, end: float,表示的是去掉音频文件中前后空白silence音后的区间。
     phone, duration, start, end = get_alignment(textgrid.get_tier_by_name('phones'))
-    text = '{'+ '}{'.join(phone) + '}' # '{A}{B}{$}{C}', $ represents silent phones
-    text = text.replace('{$}', ' ')    # '{A}{B} {C}'
-    text = text.replace('}{', ' ')     # '{A B} {C}'
+    text = '{' + '}{'.join(phone) + '}'  # '{A}{B}{$}{C}', $ represents silent phones
+    text = text.replace('{$}', ' ')  # '{A}{B} {C}'
+    text = text.replace('}{', ' ')  # '{A B} {C}'
 
     if start >= end:
         return None
@@ -88,11 +95,11 @@ def process_utterance(in_dir, out_dir, basename):
     # Read and trim wav files
     # wav ndarray<212893>
     _, wav = read(wav_path)
-    wav = wav[int(hp.sampling_rate*start):int(hp.sampling_rate*end)].astype(np.float32)
-    
+    wav = wav[int(hp.sampling_rate * start):int(hp.sampling_rate * end)].astype(np.float32)
+
     # Compute fundamental frequency
     # f0 ndarray<832>
-    f0, _ = pw.dio(wav.astype(np.float64), hp.sampling_rate, frame_period=hp.hop_length/hp.sampling_rate*1000)
+    f0, _ = pw.dio(wav.astype(np.float64), hp.sampling_rate, frame_period=hp.hop_length / hp.sampling_rate * 1000)
     # f0 ndarray<831> 基础频率，也可以认为是声带振动的频率，人类一般是140HZ，这里范围是70-800HZ
     f0 = f0[:sum(duration)]
 
@@ -120,5 +127,8 @@ def process_utterance(in_dir, out_dir, basename):
     # Save spectrogram
     mel_filename = '{}-mel-{}.npy'.format(hp.dataset, basename)
     np.save(os.path.join(out_dir, 'mel', mel_filename), mel_spectrogram.T, allow_pickle=False)
- 
-    return '|'.join([basename, text]), max(f0), min([f for f in f0 if f != 0]), max(energy), min(energy), mel_spectrogram.shape[1]
+
+    return '|'.join([basename, text]), max(f0), min([f for f in f0 if f != 0]), max(energy), min(energy), \
+           mel_spectrogram.shape[1]
+
+

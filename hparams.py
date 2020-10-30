@@ -1,10 +1,17 @@
 import os
 
 # Dataset
-dataset = "LJSpeech"
-data_path = "/home/ming/Data/Raw/LJSpeech-1.1"
-#dataset = "Blizzard2013"
+# dataset = "LJSpeech"
+# dataset = "Blizzard2013"
+dataset = "thchs30"
+
+
+
+data_path = "d:\\data\\LJSpeech-1.1\\"
 #data_path = "./Blizzard-2013/train/segmented/"
+
+if dataset == "thchs30":
+    data_path = "d:\\data\\data_thchs30\\"
 
 
 # Text
@@ -15,6 +22,8 @@ text_cleaners = ['english_cleaners']
 ### for LJSpeech ###
 sampling_rate = 22050
 filter_length = 1024
+# 一般stft短时傅里叶变换取10ms的frame shift，25ms的窗口
+# 这里在22.05khz 频率下，256大概10ms，窗口大一些，1024大概是45ms了。
 hop_length = 256
 win_length = 1024
 ### for Blizzard2013 ###
@@ -23,8 +32,11 @@ win_length = 1024
 #hop_length = 200
 #win_length = 800
 
+
+
 max_wav_value = 32768.0
 n_mel_channels = 80
+# 一般语音 的mel谱最大频率是取这个8khz，大概是人说话的最大频率吧。
 mel_fmin = 0.0
 mel_fmax = 8000.0
 
@@ -59,6 +71,12 @@ energy_max = 315.0
 #f0_max = 786.7
 #energy_min = 21.23
 #energy_max = 101.02
+
+if dataset == "thchs30": # 使用ffmpeg转到22050k后统计所得数据
+    f0_min = 71.0
+    f0_max = 800.0
+    energy_min = 0.0
+    energy_max = 573.0
 
 n_bins = 256
 
