@@ -65,8 +65,14 @@ def get_param_num(model):
     return num_param
 
 
-def plot_data(data, titles=None, filename=None):
-    fig, axes = plt.subplots(len(data), 1, squeeze=False)
+def plot_data(data, titles=None, filename=None, durations=None):
+    data_len = len(data)
+
+    n_rows = data_len
+    if durations:
+        n_rows = data_len + 1
+
+    fig, axes = plt.subplots(n_rows, 1, squeeze=False)
     if titles is None:
         titles = [None for i in range(len(data))]
 
@@ -75,23 +81,24 @@ def plot_data(data, titles=None, filename=None):
         ax.set_facecolor("None")
         return ax
 
-    for i in range(len(data)):
+    for i in range(data_len):
         spectrogram, pitch, energy = data[i]
-        axes[i][0].imshow(spectrogram, origin='lower')
-        axes[i][0].set_aspect(2.5, adjustable='box')
-        axes[i][0].set_ylim(0, hp.n_mel_channels)
-        axes[i][0].set_title(titles[i], fontsize='medium')
-        axes[i][0].tick_params(labelsize='x-small', left=False, labelleft=False)
-        axes[i][0].set_anchor('W')
+        ax = axes[i][0]
+        ax.imshow(spectrogram, origin='lower')
+        ax.set_aspect(2.5, adjustable='box')
+        ax.set_ylim(0, hp.n_mel_channels)
+        ax.set_title(titles[i], fontsize='medium')
+        ax.tick_params(labelsize='x-small', left=False, labelleft=False)
+        ax.set_anchor('W')
 
-        ax1 = add_axis(fig, axes[i][0])
+        ax1 = add_axis(fig, ax)
         ax1.plot(pitch, color='tomato')
         ax1.set_xlim(0, spectrogram.shape[1])
         ax1.set_ylim(0, hp.f0_max)
         ax1.set_ylabel('F0', color='tomato')
         ax1.tick_params(labelsize='x-small', colors='tomato', bottom=False, labelbottom=False)
 
-        ax2 = add_axis(fig, axes[i][0], 1.2)
+        ax2 = add_axis(fig, ax, 1.2)
         ax2.plot(energy, color='darkviolet')
         ax2.set_xlim(0, spectrogram.shape[1])
         ax2.set_ylim(hp.energy_min, hp.energy_max)
@@ -99,6 +106,16 @@ def plot_data(data, titles=None, filename=None):
         ax2.yaxis.set_label_position('right')
         ax2.tick_params(labelsize='x-small', colors='darkviolet', bottom=False, labelbottom=False, left=False,
                         labelleft=False, right=True, labelright=True)
+
+    if durations:
+        dy, label_y, dx, label_x = durations
+        x = np.add.accumulate(dx)
+        y = np.add.accumulate(dy)
+        ax = axes[-1][0]
+        ax.scatter(x, y)
+        ax.set_xlabel(label_x)
+        ax.set_ylabel(label_y)
+
 
     plt.savefig(filename, dpi=200)
     plt.close()
