@@ -100,10 +100,10 @@ def evaluate(model, step, vocoder=None):
 
                         if hp.vocoder == 'melgan':
                             utils.melgan_infer(mel_target_torch, vocoder, os.path.join(hp.eval_path,
-                                                                                       'ground-truth_{}_{}.wav'.format(
+                                                                                       '{}_ground-truth_{}.wav'.format(
                                                                                            basename, hp.vocoder)))
                             utils.melgan_infer(mel_postnet_torch, vocoder, os.path.join(hp.eval_path,
-                                                                                        'eval_{}_{}.wav'.format(
+                                                                                        '{}_eval_{}.wav'.format(
                                                                                             basename, hp.vocoder)))
                         elif hp.vocoder == 'waveglow':
                             utils.waveglow_infer(mel_target_torch, vocoder, os.path.join(hp.eval_path,
@@ -113,7 +113,7 @@ def evaluate(model, step, vocoder=None):
                                                                                           'eval_{}_{}.wav'.format(
                                                                                               basename, hp.vocoder)))
 
-                        np.save(os.path.join(hp.eval_path, 'eval_{}_mel.npy'.format(basename)), mel_postnet.numpy())
+                        np.save(os.path.join(hp.eval_path, '{}_eval_mel.npy'.format(basename)), mel_postnet.numpy())
 
                         f0_ = f0[k, :gt_length].detach().cpu().numpy()
                         energy_ = energy[k, :gt_length].detach().cpu().numpy()
@@ -127,9 +127,13 @@ def evaluate(model, step, vocoder=None):
                         utils.plot_data(
                             [(mel_postnet.numpy(), f0_output_, energy_output_), (mel_target_.numpy(), f0_, energy_)],
                             ['Synthesized Spectrogram', 'Ground-Truth Spectrogram'],
-                            filename=os.path.join(hp.eval_path, 'eval_{}.png'.format(basename)),
-                            durations = [d_output_, "Synthesized Duration", d_, "Ground-Truth"]
+                            filename=os.path.join(hp.eval_path, '{}_eval.png'.format(basename)),
                             )
+                        utils.plot_duration(
+                            [d_output_,  d_],
+                            ["Synthesized Duration", "Ground-Truth"],
+                            filename=os.path.join(hp.eval_path, '{}_eval_dur.png'.format(basename))
+                        )
                         idx += 1
 
             current_step += 1

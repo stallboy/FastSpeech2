@@ -67,12 +67,8 @@ def get_param_num(model):
 
 def plot_data(data, titles=None, filename=None, durations=None):
     data_len = len(data)
+    fig, axes = plt.subplots(data_len, 1, squeeze=False)
 
-    n_rows = data_len
-    if durations:
-        n_rows = data_len + 1
-
-    fig, axes = plt.subplots(n_rows, 1, squeeze=False)
     if titles is None:
         titles = [None for i in range(len(data))]
 
@@ -107,16 +103,19 @@ def plot_data(data, titles=None, filename=None, durations=None):
         ax2.tick_params(labelsize='x-small', colors='darkviolet', bottom=False, labelbottom=False, left=False,
                         labelleft=False, right=True, labelright=True)
 
-    if durations:
-        dy, label_y, dx, label_x = durations
-        x = np.add.accumulate(dx)
-        y = np.add.accumulate(dy)
-        ax = axes[-1][0]
-        ax.scatter(x, y)
-        ax.set_xlabel(label_x)
-        ax.set_ylabel(label_y)
+    plt.savefig(filename, dpi=200)
+    plt.close()
 
 
+def plot_duration(durations, labels, filename=None):
+    dy, dx = durations
+    label_y, label_x = labels
+    x = np.add.accumulate(dx)
+    y = np.add.accumulate(dy)
+    fig, ax = plt.subplots(1, 1)
+    ax.scatter(x, y)
+    ax.set_xlabel(label_x)
+    ax.set_ylabel(label_y)
     plt.savefig(filename, dpi=200)
     plt.close()
 
@@ -154,7 +153,7 @@ def get_waveglow():
 
 def waveglow_infer(mel, waveglow, path):
     with torch.no_grad():
-        wav = waveglow.infer(mel, sigma=1.0) #* hp.max_wav_value
+        wav = waveglow.infer(mel, sigma=1.0)  # * hp.max_wav_value
         wav = wav.squeeze().cpu().numpy()
 
     # wav = wav.astype('int16')
