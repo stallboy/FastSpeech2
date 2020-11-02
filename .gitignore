@@ -121,3 +121,4 @@ waveglow/pretrained_model/*
 
 .idea/
 
+/data/g2pinyin.pkl
