@@ -49,16 +49,27 @@ def preprocess_chs(text):
     from pypinyin import lazy_pinyin, Style
     pinyin = lazy_pinyin(text, style=Style.TONE3, neutral_tone_with_five=True)
     phone_line = []
+    NIL = 0
+    SP = 1
+    PHONE = 2
+    last = NIL
     for character in pinyin:
         if character == ' ':
-            phone_line.append('sp')
+            if last != SP:
+                phone_line.append('sp')
+                last = SP
         else:
             phones = mapping.get(character)
             if phones:
+                if last == PHONE:
+                    phone_line.append('_')
                 for phone in phones.split():
                     phone_line.append(phone)
-            else:
-                print("missing", character)
+                last = PHONE
+
+            elif last != SP:
+                phone_line.append('sp')
+                last = SP
 
     all_phone = "{" + ' '.join(phone_line) + "}"
     print(all_phone)
@@ -130,13 +141,13 @@ if __name__ == "__main__":
     sentences2 = [
         "每个内容生产者都可以很方便地实现自我价值，更多的人有了微创业的机会。",
         "语言的任何语义成分和关系都需要一定的形式来表现，声音就成了实现这一功能的最基本手段，语言系统中负载并传播语义的声音形式就是语音。",
+        "我也想过过过杨过过过的生活",
     ]
 
     sentences = sentences1
     if hp.dataset == "thchs30":
         sentences = sentences2
-        args.step = 140000
-
+        args.step = 120000
 
     model = get_FastSpeech2(args.step).to(device)
     melgan = waveglow = None
